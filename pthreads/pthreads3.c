@@ -21,8 +21,9 @@ void bqueue_enqueue(blocking_queue_t *bq, int item);
 int bqueue_dequeue(blocking_queue_t *bq);
 void bqueue_destroy(blocking_queue_t *bq);
 
-blocking_queue_t* bqueue_create(int capacity) {
-    /*
+blocking_queue_t* bqueue_create(int capacity)
+{
+      /*
     Crea e inicializa una cola bloqueante con la capacidad especificada.
 
     - Asigna memoria para la estructura de la cola.
@@ -33,6 +34,27 @@ blocking_queue_t* bqueue_create(int capacity) {
     - Establece el tamaño, la cabeza y la cola de la cola a sus valores iniciales.
     - Retorna un puntero a la cola bloqueante creada.
     */
+    blocking_queue_t *bq = malloc(sizeof(blocking_queue_t));
+    if (!bq)
+        return NULL;
+
+    bq->queue = malloc(sizeof(int) * capacity);
+    if (!bq->queue)
+    {
+        free(bq);
+        return NULL;
+    }
+
+    bq->head = 0;
+    bq->tail = 0;
+    bq->size = 0;
+    bq->capacity = capacity;
+
+    pthread_mutex_init(&bq->mutex, NULL);
+    pthread_cond_init(&bq->not_empty, NULL);
+    pthread_cond_init(&bq->not_full, NULL);
+
+    return bq;
 }
 
 void bqueue_enqueue(blocking_queue_t *bq, int item) {
@@ -62,12 +84,25 @@ int bqueue_dequeue(blocking_queue_t *bq) {
     - Desbloquea el mutex.
     - Retorna el elemento desencolado.
     */
+   pthread_mutex_lock(&bq->mutex);
+   while (bq->size == 0) {
+       pthread_cond_wait(&bq->not_empty, &bq->mutex);
+   }
+   int item = bq->queue[bq->head];
+   bq->head = (bq->head + 1) % bq->capacity;
+   bq->size--;
+   pthread_cond_signal(&bq->not_full);
+   pthread_mutex_unlock(&bq->mutex);
+   return item;
 }
 
 void bqueue_destroy(blocking_queue_t *bq) {
-    /*
-    Libera la memoria y destruye el mutex y las variables de condición de la cola bloqueante.
-    */
+    if (!bq) return;
+    pthread_mutex_destroy(&bq->mutex);
+    pthread_cond_destroy(&bq->not_empty);
+    pthread_cond_destroy(&bq->not_full);
+    free(bq->queue);
+    free(bq);
 }
 
 void *producer_thread(void *arg) {
