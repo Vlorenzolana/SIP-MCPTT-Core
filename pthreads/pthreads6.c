@@ -28,7 +28,7 @@ typedef struct
 	pthread_t *threads;
 	int num_threads;
 	int max_threads;
-    int shutdown; // bandera para terminar los hilos
+	int shutdown;               // bandera para terminar los hilos
 	pthread_mutex_t pool_mutex; // mutex para controlar num de hilos
 } thread_pool_t;
 
@@ -171,31 +171,29 @@ void	*worker(void *pool)
 	- Ejecuta la tarea.
 	*/
 
-   
 	thread_pool_t *p = (thread_pool_t *)pool;
 
 	while (1)
 	{
 		pthread_mutex_lock(&p->queue_mutex);
-		while (p->count == 0)
+		while (p->count == 0 && !p->shutdown)
 		{
 			pthread_cond_wait(&p->queue_not_empty, &p->queue_mutex);
 		}
-        // Si shutdown y no hay tareas pendientes, salir
+		// Si shutdown y no hay tareas pendientes, salir
         if (p->shutdown && p->count == 0)
         {
             pthread_mutex_unlock(&p->queue_mutex);
-            break; // salir del bucle del hilo
+            break;
         }
+		task_t task = p->tasks[p->head];
+		p->head = (p->head + 1) % p->capacity;
+		p->count--;
+		pthread_cond_signal(&p->queue_not_full);
+		pthread_mutex_unlock(&p->queue_mutex);
 
-        task_t task = p->tasks[p->head];
-        p->head = (p->head + 1) % p->capacity;
-        p->count--;
-        pthread_cond_signal(&p->queue_not_full);
-        pthread_mutex_unlock(&p->queue_mutex);
-
-        task.function(task.argument);
-    }
+		task.function(task.argument);
+	}
 	return (NULL);
 }
 
@@ -217,10 +215,10 @@ void	thread_pool_destroy(thread_pool_t *pool)
 	// Indicar a los hilos que terminen
 	// Estableciendo pool->shutdown = 1 y señalando la condición.
 	pthread_cond_broadcast(&pool->queue_not_empty);
-    pool->shutdown = 1;
-    pthread_cond_broadcast(&pool->queue_not_empty); // Despertar a todos los workers
-	// Despertar a los hilos para que comprueben la condición de cierre
-    pthread_mutex_unlock(&pool->queue_mutex);
+		// Despertar a todos los hilos
+	pthread_cond_broadcast(&pool->queue_not_full); 
+		// Despertar por si alguno está esperando espacio
+	pthread_mutex_unlock(&pool->queue_mutex);
 
 	for (int i = 0; i < pool->num_threads; ++i)
 	{
@@ -251,7 +249,7 @@ int	main(void)
 	}
 
 	sleep(10);
-		// Dar tiempo para que las tareas se ejecuten y el pool se redimensione
+	// Dar tiempo para que las tareas se ejecuten y el pool se redimensione
 
 	thread_pool_destroy(&pool);
 	printf("Programa principal terminado.\n");
