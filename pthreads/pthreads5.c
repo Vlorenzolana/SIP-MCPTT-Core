@@ -15,6 +15,10 @@ void cleanup_tls(void *value) {
     - Imprime un mensaje indicando que se está limpiando la memoria (si es necesario).
     - Libera la memoria asignada para el valor TLS (si fue asignada dinámicamente).
     */
+   if (value != NULL) {
+    printf("Liberando memoria TLS del hilo: %s\n", (char *)value);
+    free(value);
+}
 }
 
 void set_thread_local_data(const char *data) {
@@ -26,6 +30,14 @@ void set_thread_local_data(const char *data) {
     - Asocia la dirección de esta memoria con la clave TLS 'tls_key' para el hilo actual
       utilizando pthread_setspecific().
     */
+   char *buffer = malloc(strlen(data) + 1);  // +1 para el null terminator
+   if (!buffer) {
+       perror("malloc falló en set_thread_local_data");
+       pthread_exit(NULL);
+   }
+
+   strcpy(buffer, data);
+   pthread_setspecific(tls_key, buffer);
 }
 
 char *get_thread_local_data() {
@@ -36,6 +48,7 @@ char *get_thread_local_data() {
     - Retorna el puntero al valor asociado con la clave para este hilo.
       Si no se ha establecido ningún valor, retorna NULL.
     */
+   return (char *)pthread_getspecific(tls_key);
 }
 
 void *thread_function(void *arg) {
